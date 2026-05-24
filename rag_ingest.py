@@ -1,23 +1,14 @@
-
 import os
 import re
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-# ============================================================
-# CONFIG
-# ============================================================
-DOCS_DIR = "./documents"
-CHROMA_DIR = "./chroma_db"
-MODEL_DIR = "./models/all-MiniLM-L6-v2"
-COLLECTION_NAME = "gis_knowledge"
-CHUNK_SIZE = 500          # characters per chunk
-CHUNK_OVERLAP = 100       # overlap between chunks
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".markdown", ".text"}
+from chatbot_api.config import (
+    DOCS_DIR, CHROMA_DIR, MODEL_DIR, COLLECTION_NAME,
+    CHUNK_SIZE, CHUNK_OVERLAP, SUPPORTED_EXTENSIONS,
+)
 
-# ============================================================
-# CHUNKING
-# ============================================================
+
 def chunk_by_headers(text, source_file):
     """
     Smart chunking: split by markdown headers first,
@@ -25,7 +16,6 @@ def chunk_by_headers(text, source_file):
     """
     chunks = []
 
-    # Split by markdown headers (##, ###, etc.)
     sections = re.split(r'\n(?=#{1,4}\s)', text)
 
     for section in sections:
@@ -33,7 +23,6 @@ def chunk_by_headers(text, source_file):
         if not section:
             continue
 
-        # Extract header for metadata
         header_match = re.match(r'^(#{1,4})\s+(.+)', section)
         header = header_match.group(2) if header_match else ""
 
@@ -44,7 +33,6 @@ def chunk_by_headers(text, source_file):
                 "header": header,
             })
         else:
-            # Split large sections into overlapping chunks
             words = section.split()
             current_chunk = []
             current_length = 0
@@ -60,12 +48,10 @@ def chunk_by_headers(text, source_file):
                         "source": source_file,
                         "header": header,
                     })
-                    # Keep last N words for overlap
                     overlap_words = current_chunk[-CHUNK_OVERLAP // 5:]
                     current_chunk = overlap_words
                     current_length = sum(len(w) + 1 for w in current_chunk)
 
-            # Don't forget remaining text
             if current_chunk:
                 chunk_text = " ".join(current_chunk)
                 if len(chunk_text.strip()) > 50:
@@ -101,19 +87,14 @@ def load_documents(docs_dir):
     return all_chunks
 
 
-# ============================================================
-# INGEST
-# ============================================================
 def main():
     print("=" * 50)
     print("GIS RAG — Document Ingestion")
     print("=" * 50)
 
-    # Load embedding model (local)
     print("\nLoading embedding model...")
     embedder = SentenceTransformer(MODEL_DIR)
 
-    # Load and chunk documents
     print(f"\nLoading documents from: {DOCS_DIR}")
     chunks = load_documents(DOCS_DIR)
     print(f"\nTotal chunks: {len(chunks)}")
@@ -122,11 +103,9 @@ def main():
         print("No documents found! Add .md or .txt files to ./documents/")
         return
 
-    # Create/reset ChromaDB collection
     print("\nBuilding vector store...")
     client = chromadb.PersistentClient(path=CHROMA_DIR)
 
-    # Delete existing collection if it exists (clean rebuild)
     try:
         client.delete_collection(COLLECTION_NAME)
     except Exception:
@@ -137,7 +116,6 @@ def main():
         metadata={"hnsw:space": "cosine"},
     )
 
-    # Generate embeddings and store
     texts = [c["text"] for c in chunks]
     embeddings = embedder.encode(texts, show_progress_bar=True).tolist()
 
