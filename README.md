@@ -110,7 +110,7 @@ The FastAPI backend exposes:
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Status and chunk count |
-| POST | `/api/chat` | Streaming SSE chat — `{session_id, message}` |
+| POST | `/api/chat` | Streaming SSE chat — `{session_id, message}`; events: `token`, `sources`, `done` |
 | POST | `/api/chat/clear` | Clear session history — `{session_id}` |
 | POST | `/api/chat/reload` | Reload ChromaDB without restart |
 
@@ -138,8 +138,9 @@ gis-rag-chatbot/
 │   └── src/
 │       ├── pages/Home.jsx      # Landing page
 │       └── components/
-│           ├── ChatWidget.jsx  # Collapsible chat button
-│           └── ChatWindow.jsx  # Chat interface with streaming
+│           ├── ChatWidget.jsx  # Collapsible FAB, generates session ID
+│           ├── ChatWindow.jsx  # Chat interface with streaming
+│           └── chat.css        # All component styles
 ├── documents/              # Knowledge base source files
 ├── models/                 # Local embedding model
 ├── chroma_db/              # Vector store (auto-created)

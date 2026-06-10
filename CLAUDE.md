@@ -57,8 +57,9 @@ gis-rag-chatbot/
 │   └── src/
 │       ├── pages/Home.jsx      # Landing page
 │       └── components/
-│           ├── ChatWidget.jsx  # Collapsible FAB (bottom-right)
-│           └── ChatWindow.jsx  # Chat messages + SSE streaming
+│           ├── ChatWidget.jsx  # Collapsible FAB (bottom-right), generates session ID via crypto.randomUUID()
+│           ├── ChatWindow.jsx  # Chat messages + SSE streaming + clear button
+│           └── chat.css        # All component styles
 ├── documents/              # Knowledge base source files
 ├── models/                 # Local embedding model
 ├── chroma_db/              # ChromaDB vector store
@@ -70,7 +71,9 @@ gis-rag-chatbot/
 
 ## Shared Config (`chatbot_api/config.py`)
 
-All constants live here — both `rag_chat.py` and `rag_ingest.py` import from it. Paths are computed as absolute using `Path(__file__).resolve().parent.parent` so they work regardless of working directory.
+All constants live here — `rag_chat.py`, `rag_ingest.py`, and `rag_core.py` all import from it. Paths are computed as absolute using `Path(__file__).resolve().parent.parent` so they work regardless of working directory.
+
+Key constants: `MODEL_DIR`, `CHROMA_DIR`, `COLLECTION_NAME`, `OLLAMA_MODEL`, `TOP_K`, `SIMILARITY_THRESHOLD`, `DOCS_DIR`, `CHUNK_SIZE` (500), `CHUNK_OVERLAP` (100), `SUPPORTED_EXTENSIONS`, `SYSTEM_PROMPT`.
 
 ## Chunking Strategy (`rag_ingest.py`)
 
@@ -80,19 +83,35 @@ Documents are split first by markdown headers (`#`–`####`), then by character 
 
 - Retrieves `TOP_K = 5` chunks per query using cosine similarity
 - Filters out chunks below `SIMILARITY_THRESHOLD = 0.3` (similarity = `1 - distance/2` since ChromaDB cosine distance ∈ [0, 2])
-- Keeps last 6 chat exchanges in context window for multi-turn conversation
+- Keeps last 6 chat exchanges (`history[-6:]`) in context window for multi-turn conversation
 - System prompt is rebuilt on every turn with freshly retrieved context
+- `ask()` — non-streaming, used by CLI (`rag_chat.py`)
+- `ask_stream()` — streaming generator, yields SSE strings, mutates `session_data` dict in place; used by API
 
 ## API Endpoints (`chatbot_api/main.py`)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/health` | Returns status and chunk count |
+| GET | `/api/health` | Returns `{status, chunks_count}` |
 | POST | `/api/chat` | SSE streaming chat — body: `{session_id, message}` |
 | POST | `/api/chat/clear` | Clear session history — body: `{session_id}` |
-| POST | `/api/chat/reload` | Reload ChromaDB collection |
+| POST | `/api/chat/reload` | Reload ChromaDB collection, returns `{ok, chunks}` |
 
-SSE event types: `token` (streamed text), `sources` (chunk metadata), `done`.
+SSE event types: `token` (streamed text chunk), `sources` (array of chunk metadata with preview), `done`.
+
+Each source chunk in the `sources` event contains: `source`, `header`, `similarity` (0–1), `preview` (first 300 chars).
+
+## App Startup (`chatbot_api/main.py`)
+
+On startup, FastAPI loads two objects into `app.state`:
+- `app.state.embedder` — the sentence-transformers model weights (loaded into RAM once)
+- `app.state.collection` — a ChromaDB collection **handle** (lightweight client object, not all vectors in RAM)
+
+Both are passed directly into `ask_stream()` on each request.
+
+## SSE Over POST
+
+The frontend uses `fetch` + manual stream reading instead of the browser's `EventSource` API because `EventSource` only supports GET requests and cannot send a JSON body. The SSE wire format is identical — each event is `data: <json>\n\n`.
 
 ## SSE Streaming Note
 
