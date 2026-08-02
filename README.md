@@ -87,6 +87,8 @@ npm run dev
 
 Open **http://localhost:5173** — click the chat button in the bottom-right corner.
 
+![GIS RAG Chatbot UI](snaps/gis-chatbot-1.jpg)
+
 The web UI features:
 - Collapsible chat widget (bottom-right corner)
 - Token-by-token streaming responses
